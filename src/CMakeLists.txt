@@ -29,7 +29,7 @@ if(NOT WIN32)
 endif()
 
 target_compile_options(threadc PRIVATE
-    $<IF:$<C_COMPILER_ID:MSVC>,
+    $<IF:$<BOOL:${MSVC}>,
         /W4,
         -Wall -Wextra -Wpedantic -Wno-unused-parameter>
 )
