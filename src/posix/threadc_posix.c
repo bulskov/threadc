@@ -161,6 +161,110 @@ void tc_mutex_unlock(tc_mutex_t *m)
     (void)rc;
 }
 
+/* --- Condition variable ------------------------------------------------- */
+
+_Static_assert(
+    sizeof(pthread_cond_t) <= sizeof(tc_cond_t),
+    "tc_cond_t is too small for pthread_cond_t");
+_Static_assert(
+    _Alignof(pthread_cond_t) <= _Alignof(tc_cond_t),
+    "tc_cond_t is under-aligned for pthread_cond_t");
+
+/* Timeouts at least this long (100 years) mean "no limit": the wait becomes
+ * a plain wait, which also keeps now + timeout far from overflowing. */
+#define FOREVER_NS (UINT64_C(100) * 365 * 24 * 3600 * NS_PER_S)
+
+static pthread_cond_t *as_pcond(tc_cond_t *c)
+{
+    return (pthread_cond_t *)c->opaque;
+}
+
+void tc_cond_init(tc_cond_t *c)
+{
+    assert(c != NULL);
+    pthread_condattr_t attr;
+    pthread_condattr_init(&attr);
+#if !defined(__APPLE__)
+    /* Time timed waits on the monotonic clock, so a wall-clock jump (NTP, a
+     * user changing the time) neither stretches nor cuts them short.  macOS
+     * has no setclock; it waits on a relative time instead (see below). */
+    pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+#endif
+    int rc = pthread_cond_init(as_pcond(c), &attr);
+    pthread_condattr_destroy(&attr);
+    assert(rc == 0);
+    (void)rc;
+}
+
+void tc_cond_destroy(tc_cond_t *c)
+{
+    assert(c != NULL);
+    int rc = pthread_cond_destroy(as_pcond(c));
+    assert(rc == 0 && "tc_cond_destroy: threads are still waiting");
+    (void)rc;
+}
+
+void tc_cond_wait(tc_cond_t *c, tc_mutex_t *m)
+{
+    assert(c != NULL && m != NULL);
+    int rc = pthread_cond_wait(as_pcond(c), as_pmutex(m));
+    assert(rc == 0 && "tc_cond_wait: mutex not held by this thread?");
+    (void)rc;
+}
+
+tc_err_kind_t tc_cond_wait_timeout(
+    tc_cond_t *c, tc_mutex_t *m, uint64_t timeout_ns)
+{
+    assert(c != NULL && m != NULL);
+    if (timeout_ns == 0)
+        return TC_TIMEOUT;
+    if (timeout_ns >= FOREVER_NS)
+    {
+        tc_cond_wait(c, m);
+        return TC_OK;
+    }
+
+#if defined(__APPLE__)
+    struct timespec rel = {
+        .tv_sec = (time_t)(timeout_ns / NS_PER_S),
+        .tv_nsec = (long)(timeout_ns % NS_PER_S),
+    };
+    int rc =
+        pthread_cond_timedwait_relative_np(as_pcond(c), as_pmutex(m), &rel);
+#else
+    /* pthread_cond_timedwait takes an ABSOLUTE deadline on the clock chosen
+     * in tc_cond_init — the same CLOCK_MONOTONIC as tc_time_now_ns. */
+    uint64_t deadline = tc_time_now_ns() + timeout_ns;
+    struct timespec abs = {
+        .tv_sec = (time_t)(deadline / NS_PER_S),
+        .tv_nsec = (long)(deadline % NS_PER_S),
+    };
+    int rc = pthread_cond_timedwait(as_pcond(c), as_pmutex(m), &abs);
+#endif
+    assert(
+        (rc == 0 || rc == ETIMEDOUT)
+        && "tc_cond_wait_timeout: mutex not held by this thread?");
+    return rc == ETIMEDOUT ? TC_TIMEOUT : TC_OK;
+}
+
+void tc_cond_signal(tc_cond_t *c)
+{
+    assert(c != NULL);
+    int rc = pthread_cond_signal(as_pcond(c));
+    assert(rc == 0);
+    (void)rc;
+}
+
+void tc_cond_broadcast(tc_cond_t *c)
+{
+    assert(c != NULL);
+    int rc = pthread_cond_broadcast(as_pcond(c));
+    assert(rc == 0);
+    (void)rc;
+}
+
+/* --- Time --------------------------------------------------------------- */
+
 uint64_t tc_time_now_ns(void)
 {
     struct timespec ts;
