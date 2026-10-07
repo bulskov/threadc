@@ -12,13 +12,19 @@
 #include <errno.h>
 #include <process.h> /* _beginthreadex */
 #include <stdint.h>
+#include <string.h> /* memcpy */
 #include <windows.h>
+
+/* Thread names: 15 bytes plus the NUL, the same limit as the POSIX backend
+ * (Linux's), so a name looks the same on every platform. */
+#define NAME_CAP 16
 
 typedef struct
 {
     HANDLE handle;
     tc_thread_fn fn;
     void *arg;
+    char name[NAME_CAP]; /* copied at start: the caller's buffer may die */
 } win32_thread_t;
 
 _Static_assert(
@@ -33,9 +39,39 @@ static win32_thread_t *as_win32(tc_thread_t *t)
     return (win32_thread_t *)t->opaque;
 }
 
+/* Copy name into dst (cap bytes including the NUL), truncating at a whole
+ * UTF-8 character so a multi-byte character is never cut in half. */
+static void copy_name(char *dst, size_t cap, string_t name)
+{
+    size_t n = name.ptr ? name.len : 0;
+    if (n > cap - 1)
+    {
+        n = cap - 1;
+        /* Back off over continuation bytes (10xxxxxx) to a character
+         * boundary. */
+        while (n > 0 && ((unsigned char)name.ptr[n] & 0xC0) == 0x80)
+            n--;
+    }
+    if (n > 0)
+        memcpy(dst, name.ptr, n);
+    dst[n] = '\0';
+}
+
+/* Name the calling thread.  Windows wants UTF-16 (SetThreadDescription,
+ * Windows 10 1607 and later); debuggers and Task Manager show it. */
+static void set_current_thread_name(const char *name)
+{
+    if (name[0] == '\0')
+        return;
+    wchar_t wide[NAME_CAP]; /* never more UTF-16 units than UTF-8 bytes */
+    if (MultiByteToWideChar(CP_UTF8, 0, name, -1, wide, NAME_CAP) > 0)
+        SetThreadDescription(GetCurrentThread(), wide);
+}
+
 static unsigned __stdcall trampoline(void *p)
 {
     win32_thread_t *wt = p;
+    set_current_thread_name(wt->name);
     wt->fn(wt->arg);
     return 0;
 }
@@ -43,8 +79,6 @@ static unsigned __stdcall trampoline(void *p)
 tc_err_t tc_thread_start(
     tc_thread_t *t, tc_thread_fn fn, void *arg, string_t name)
 {
-    (void)name;
-
     if (!t || !fn)
     {
         return (tc_err_t){TC_INVALID, 0};
@@ -53,6 +87,7 @@ tc_err_t tc_thread_start(
     win32_thread_t *wt = as_win32(t);
     wt->fn = fn;
     wt->arg = arg;
+    copy_name(wt->name, sizeof wt->name, name);
     uintptr_t h = _beginthreadex(NULL, 0, trampoline, wt, 0, NULL);
     if (h == 0)
     {
