@@ -28,7 +28,15 @@
 #include <windows.h>
 #endif
 
-#define NAME_MAX_BYTES 15
+/* On the supported platforms the name MUST be readable back — otherwise the
+ * tests below would pass without checking anything. */
+#if defined(__linux__) || defined(__APPLE__) || defined(_WIN32)
+#define SKIP_IF_UNSUPPORTED(supported) ASSERT_TRUE(supported)
+#else
+#define SKIP_IF_UNSUPPORTED(supported)                                         \
+    if (!(supported))                                                          \
+    return
+#endif
 
 /* The calling thread's name as the OS reports it, as UTF-8.  Returns false
  * where the platform has no way to read it back. */
@@ -85,16 +93,14 @@ static seen_t run_named(string_t name)
 TEST(name_is_visible_inside_the_thread)
 {
     seen_t s = run_named(STRING_LIT("scanner-1"));
-    if (!s.supported)
-        return;
+    SKIP_IF_UNSUPPORTED(s.supported);
     ASSERT_STR_EQ("scanner-1", s.name);
 }
 
 TEST(exactly_fifteen_bytes_are_kept)
 {
     seen_t s = run_named(STRING_LIT("123456789012345"));
-    if (!s.supported)
-        return;
+    SKIP_IF_UNSUPPORTED(s.supported);
     ASSERT_STR_EQ("123456789012345", s.name);
 }
 
@@ -102,8 +108,7 @@ TEST(long_name_is_cut_to_fifteen_bytes)
 {
     seen_t s =
         run_named(STRING_LIT("a-thread-name-much-longer-than-fifteen-bytes"));
-    if (!s.supported)
-        return;
+    SKIP_IF_UNSUPPORTED(s.supported);
     ASSERT_STR_EQ("a-thread-name-m", s.name);
 }
 
@@ -114,8 +119,7 @@ TEST(cut_never_splits_a_utf8_character)
     seen_t s = run_named(STRING_LIT(
         "\xc3\xa5\xc3\xa5\xc3\xa5\xc3\xa5\xc3\xa5\xc3\xa5\xc3\xa5\xc3\xa5"
         "\xc3\xa5"));
-    if (!s.supported)
-        return;
+    SKIP_IF_UNSUPPORTED(s.supported);
     ASSERT_STR_EQ(
         "\xc3\xa5\xc3\xa5\xc3\xa5\xc3\xa5\xc3\xa5\xc3\xa5\xc3\xa5", s.name);
 }
@@ -131,8 +135,7 @@ TEST(name_is_copied_at_start)
     ASSERT_EQ(TC_OK, tc_thread_start(&t, record_name, &s, name).kind);
     memset(buf, 'x', sizeof buf - 1);
     tc_thread_join(&t);
-    if (!s.supported)
-        return;
+    SKIP_IF_UNSUPPORTED(s.supported);
     ASSERT_STR_EQ("temporary", s.name);
 }
 
@@ -142,8 +145,8 @@ TEST(empty_name_keeps_the_default)
 {
     char main_name[64];
     seen_t plain = run_named(STRING_LIT(""));
-    if (!plain.supported || !current_thread_name(main_name, sizeof main_name))
-        return;
+    SKIP_IF_UNSUPPORTED(plain.supported);
+    SKIP_IF_UNSUPPORTED(current_thread_name(main_name, sizeof main_name));
 #if defined(__linux__)
     ASSERT_STR_EQ(main_name, plain.name);
 #endif
