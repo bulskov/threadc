@@ -1,8 +1,12 @@
 add_library(threadc STATIC)
 add_library(threadc::threadc ALIAS threadc)
 
-# One backend per platform.  src/common/ (sema, queue, pool — no OS code)
-# joins here once it exists.
+# Portable code (no OS calls) is the same on every platform.
+target_sources(threadc PRIVATE
+    common/once.c
+)
+
+# One backend per platform.
 if(WIN32)
     target_sources(threadc PRIVATE
         win32/threadc_win32.c
