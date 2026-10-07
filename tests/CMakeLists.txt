@@ -8,3 +8,4 @@ endfunction()
 
 threadc_test(smoke)
 threadc_test(time)
+threadc_test(thread)

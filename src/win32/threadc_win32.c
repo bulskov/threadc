@@ -8,7 +8,96 @@
 
 #include "threadc/threadc.h"
 
+#include <assert.h>
+#include <errno.h>
+#include <process.h> /* _beginthreadex */
+#include <stdint.h>
 #include <windows.h>
+
+typedef struct
+{
+    HANDLE handle;
+    tc_thread_fn fn;
+    void *arg;
+} win32_thread_t;
+
+_Static_assert(
+    sizeof(win32_thread_t) <= sizeof(tc_thread_t),
+    "tc_thread_t is too small for win32_thread_t");
+_Static_assert(
+    _Alignof(win32_thread_t) <= _Alignof(tc_thread_t),
+    "tc_thread_t is under-aligned for win32_thread_t");
+
+static win32_thread_t *as_win32(tc_thread_t *t)
+{
+    return (win32_thread_t *)t->opaque;
+}
+
+static unsigned __stdcall trampoline(void *p)
+{
+    win32_thread_t *wt = p;
+    wt->fn(wt->arg);
+    return 0;
+}
+
+tc_err_t tc_thread_start(
+    tc_thread_t *t, tc_thread_fn fn, void *arg, string_t name)
+{
+    (void)name;
+
+    if (!t || !fn)
+    {
+        return (tc_err_t){TC_INVALID, 0};
+    }
+
+    win32_thread_t *wt = as_win32(t);
+    wt->fn = fn;
+    wt->arg = arg;
+    uintptr_t h = _beginthreadex(NULL, 0, trampoline, wt, 0, NULL);
+    if (h == 0)
+    {
+        int e = errno;
+        if (e == EAGAIN || e == EACCES)
+        {
+            return (tc_err_t){TC_RESOURCE, e};
+        }
+
+        return (tc_err_t){TC_OS, e};
+    }
+
+    wt->handle = (HANDLE)h;
+
+    return (tc_err_t){TC_OK, 0};
+}
+
+void tc_thread_join(tc_thread_t *t)
+{
+
+    win32_thread_t *wt = as_win32(t);
+    DWORD rc = WaitForSingleObject(wt->handle, INFINITE);
+    assert(rc == WAIT_OBJECT_0 && "tc_thread_join: failed to join thread");
+    (void)rc; /* unused when NDEBUG removes the assert */
+    int rc2 = CloseHandle(wt->handle);
+    assert(rc2 && "tc_thread_join: failed to close thread handle");
+    (void)rc2; /* unused when NDEBUG removes the assert */
+    wt->handle = NULL;
+}
+
+uint64_t tc_thread_id(void)
+{
+    return (uint64_t)GetCurrentThreadId();
+}
+
+void tc_thread_yield(void)
+{
+    SwitchToThread();
+}
+
+int tc_cpu_count(void)
+{
+    int n = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
+    return n > 0 ? n : 1;
+}
 
 uint64_t tc_time_now_ns(void)
 {
