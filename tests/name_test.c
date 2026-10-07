@@ -46,7 +46,9 @@ static bool current_thread_name(char *buf, size_t cap)
 #if defined(__linux__)
     char tmp[16] = {0}; /* PR_GET_NAME always writes 16 bytes */
     if (prctl(PR_GET_NAME, tmp, 0, 0, 0) != 0)
+    {
         return false;
+    }
     strncpy(buf, tmp, cap - 1);
     buf[cap - 1] = '\0';
     return true;
@@ -55,7 +57,9 @@ static bool current_thread_name(char *buf, size_t cap)
 #elif defined(_WIN32)
     PWSTR wide = NULL;
     if (FAILED(GetThreadDescription(GetCurrentThread(), &wide)))
+    {
         return false;
+    }
     int n =
         WideCharToMultiByte(CP_UTF8, 0, wide, -1, buf, (int)cap, NULL, NULL);
     LocalFree(wide);

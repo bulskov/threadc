@@ -37,7 +37,9 @@ void tc_once(tc_once_t *o, void (*fn)(void))
     /* Fast path, taken by every call after the first.  The acquire pairs
      * with the release store below: whatever fn wrote is visible here. */
     if (atomic_load_explicit(state, memory_order_acquire) == ONCE_DONE)
+    {
         return;
+    }
 
     /* Exactly one thread moves NOT_STARTED -> RUNNING and runs fn. */
     int expected = ONCE_NOT_STARTED;
@@ -58,5 +60,7 @@ void tc_once(tc_once_t *o, void (*fn)(void))
      * the same tc_once_t would wait here forever — documented in the
      * header.) */
     while (atomic_load_explicit(state, memory_order_acquire) != ONCE_DONE)
+    {
         tc_thread_yield();
+    }
 }

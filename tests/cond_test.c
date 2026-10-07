@@ -69,7 +69,9 @@ static tc_err_kind_t wait_for_ready(gate_t *g, uint64_t timeout_ns)
     {
         uint64_t now = tc_time_now_ns();
         if (now >= deadline)
+        {
             return TC_TIMEOUT;
+        }
         tc_cond_wait_timeout(&g->cond, &g->mutex, deadline - now);
     }
     return TC_OK;
@@ -94,7 +96,9 @@ static void wait_plain(void *arg)
     tc_mutex_lock(&g->mutex);
     g->waiting++;
     while (!g->ready)
+    {
         tc_cond_wait(&g->cond, &g->mutex);
+    }
     g->woken++;
     tc_mutex_unlock(&g->mutex);
 }
@@ -107,9 +111,13 @@ static void wait_patient(void *arg)
     tc_mutex_lock(&g->mutex);
     g->waiting++;
     if (wait_for_ready(g, PATIENCE) == TC_OK)
+    {
         g->woken++;
+    }
     else
+    {
         g->timed_out++;
+    }
     tc_mutex_unlock(&g->mutex);
 }
 
@@ -125,7 +133,9 @@ static void wait_until_waiting(gate_t *g, int n)
         int w = g->waiting;
         tc_mutex_unlock(&g->mutex);
         if (w >= n)
+        {
             return;
+        }
         tc_thread_yield();
     }
 }
@@ -206,10 +216,12 @@ TEST(broadcast_wakes_every_waiter)
     gate_init(&g);
     tc_thread_t waiters[WAITERS];
     for (int i = 0; i < WAITERS; ++i)
+    {
         ASSERT_EQ(
             TC_OK,
             tc_thread_start(&waiters[i], wait_patient, &g, STRING_LIT("bc"))
                 .kind);
+    }
 
     wait_until_waiting(&g, WAITERS);
     tc_mutex_lock(&g.mutex);
@@ -218,7 +230,9 @@ TEST(broadcast_wakes_every_waiter)
     tc_mutex_unlock(&g.mutex);
 
     for (int i = 0; i < WAITERS; ++i)
+    {
         tc_thread_join(&waiters[i]);
+    }
     ASSERT_EQ(WAITERS, g.woken);
     ASSERT_EQ(0, g.timed_out);
     gate_destroy(&g);
@@ -304,7 +318,9 @@ TEST(wait_timeout_longer_than_one_second)
         tc_thread_start(&signaller, signal_after, &g, STRING_LIT("sig")).kind);
     tc_err_kind_t r = TC_OK;
     while (!g.ready && r == TC_OK)
+    {
         r = tc_cond_wait_timeout(&g.cond, &g.mutex, 1500 * NS_PER_MS);
+    }
     uint64_t elapsed = tc_time_now_ns() - start;
     tc_mutex_unlock(&g.mutex);
     tc_thread_join(&signaller);
@@ -330,7 +346,9 @@ TEST(huge_timeout_does_not_overflow)
         tc_thread_start(&signaller, signal_after, &g, STRING_LIT("sig")).kind);
     tc_err_kind_t r = TC_OK;
     while (!g.ready && r == TC_OK)
+    {
         r = tc_cond_wait_timeout(&g.cond, &g.mutex, UINT64_MAX);
+    }
     uint64_t elapsed = tc_time_now_ns() - start;
     tc_mutex_unlock(&g.mutex);
     tc_thread_join(&signaller);
@@ -376,7 +394,9 @@ static void queue_put(queue_t *q, long long item)
 {
     tc_mutex_lock(&q->mutex);
     while (q->count == CAPACITY)
+    {
         tc_cond_wait(&q->not_full, &q->mutex);
+    }
     q->items[(q->head + q->count) % CAPACITY] = item;
     q->count++;
     tc_cond_signal(&q->not_empty);
@@ -387,7 +407,9 @@ static long long queue_take(queue_t *q)
 {
     tc_mutex_lock(&q->mutex);
     while (q->count == 0)
+    {
         tc_cond_wait(&q->not_empty, &q->mutex);
+    }
     long long item = q->items[q->head];
     q->head = (q->head + 1) % CAPACITY;
     q->count--;
@@ -411,7 +433,9 @@ static void producer(void *arg)
 {
     worker_t *w = arg;
     for (int i = 0; i < w->count; ++i)
+    {
         queue_put(w->queue, w->first + i);
+    }
 }
 
 static void consumer(void *arg)
@@ -423,7 +447,9 @@ static void consumer(void *arg)
     {
         long long item = queue_take(w->queue);
         if (item <= last)
+        {
             w->in_order = false;
+        }
         last = item;
         w->sum += item;
     }
@@ -480,14 +506,20 @@ TEST(producer_consumer_many_to_many)
                 .kind);
     }
     for (int i = 0; i < PRODUCERS; ++i)
+    {
         tc_thread_join(&tp[i]);
+    }
     for (int i = 0; i < CONSUMERS; ++i)
+    {
         tc_thread_join(&tcn[i]);
+    }
     queue_destroy(&q);
 
     long long total = 0;
     for (int i = 0; i < CONSUMERS; ++i)
+    {
         total += conss[i].sum;
+    }
     long long n = (long long)ITEMS * PRODUCERS;
     ASSERT_EQ(n * (n + 1) / 2, total);
 }

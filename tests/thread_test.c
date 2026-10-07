@@ -50,7 +50,9 @@ static void record_when_all_alive(void *arg)
 {
     atomic_fetch_add(&arrived, 1);
     while (atomic_load(&arrived) < MANY)
+    {
         tc_thread_yield();
+    }
     record(arg);
 }
 
@@ -117,9 +119,13 @@ TEST(many_threads_each_get_their_own_arg)
                 .kind);
     }
     for (int i = 0; i < MANY; ++i)
+    {
         tc_thread_join(&threads[i]);
+    }
     for (int i = 0; i < MANY; ++i)
+    {
         ASSERT_EQ((i + 1) * 2, slots[i].output);
+    }
 }
 
 /* Start/join many times through the same tc_thread_t: it is reusable after
@@ -174,7 +180,9 @@ TEST(name_buffer_may_change_after_start)
     string_t name = {buf, sizeof buf - 1};
     ASSERT_EQ(TC_OK, tc_thread_start(&t, do_nothing, NULL, name).kind);
     for (size_t i = 0; i < sizeof buf - 1; ++i)
+    {
         buf[i] = 'x';
+    }
     tc_thread_join(&t);
 }
 
@@ -215,6 +223,7 @@ TEST(live_threads_have_distinct_ids)
     tc_thread_t threads[MANY];
     atomic_store(&arrived, 0);
     for (int i = 0; i < MANY; ++i)
+    {
         ASSERT_EQ(
             TC_OK,
             tc_thread_start(
@@ -223,15 +232,20 @@ TEST(live_threads_have_distinct_ids)
                 &slots[i],
                 STRING_LIT("ids"))
                 .kind);
+    }
     for (int i = 0; i < MANY; ++i)
+    {
         tc_thread_join(&threads[i]);
+    }
 
     uint64_t main_id = tc_thread_id();
     for (int i = 0; i < MANY; ++i)
     {
         ASSERT_NE(main_id, slots[i].id);
         for (int j = i + 1; j < MANY; ++j)
+        {
             ASSERT_NE(slots[i].id, slots[j].id);
+        }
     }
 }
 
@@ -245,7 +259,9 @@ TEST(cpu_count_is_at_least_one)
 TEST(yield_returns)
 {
     for (int i = 0; i < 1000; ++i)
+    {
         tc_thread_yield();
+    }
 }
 
 int main(int argc, char *argv[])

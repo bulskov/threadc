@@ -60,10 +60,14 @@ static void copy_name(char *dst, size_t cap, string_t name)
         /* Back off over continuation bytes (10xxxxxx) to a character
          * boundary. */
         while (n > 0 && ((unsigned char)name.ptr[n] & 0xC0) == 0x80)
+        {
             n--;
+        }
     }
     if (n > 0)
+    {
         memcpy(dst, name.ptr, n);
+    }
     dst[n] = '\0';
 }
 
@@ -72,7 +76,9 @@ static void copy_name(char *dst, size_t cap, string_t name)
 static void set_current_thread_name(const char *name)
 {
     if (name[0] == '\0')
+    {
         return; /* keep the default (Linux: inherited from the creator) */
+    }
 #if defined(__linux__)
     prctl(PR_SET_NAME, name, 0, 0, 0);
 #elif defined(__APPLE__)
@@ -258,7 +264,9 @@ tc_err_kind_t tc_cond_wait_timeout(
 {
     assert(c != NULL && m != NULL);
     if (timeout_ns == 0)
+    {
         return TC_TIMEOUT;
+    }
     if (timeout_ns >= FOREVER_NS)
     {
         tc_cond_wait(c, m);

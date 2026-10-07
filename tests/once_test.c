@@ -55,7 +55,9 @@ TEST(later_calls_do_nothing)
     reset();
     tc_once_t once = TC_ONCE_INIT;
     for (int i = 0; i < 100; ++i)
+    {
         tc_once(&once, init_fast);
+    }
     ASSERT_EQ(1, atomic_load(&calls));
 }
 
@@ -121,11 +123,15 @@ TEST(racing_threads_run_fn_once_and_all_see_its_result)
                 .kind);
     }
     for (int i = 0; i < THREADS; ++i)
+    {
         tc_thread_join(&threads[i]);
+    }
 
     ASSERT_EQ(1, atomic_load(&calls));
     for (int i = 0; i < THREADS; ++i)
+    {
         ASSERT_EQ(42, callers[i].seen);
+    }
 }
 
 int main(int argc, char *argv[])

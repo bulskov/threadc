@@ -45,7 +45,9 @@ static void critical_section(shared_t *s)
 {
     s->inside++;
     if (s->inside > s->max_inside)
+    {
         s->max_inside = s->inside;
+    }
     s->counter++;
     s->inside--;
 }
@@ -68,7 +70,9 @@ static void increment_with_try_lock(void *arg)
     for (int i = 0; i < INCREMENTS; ++i)
     {
         while (!tc_mutex_try_lock(&s->mutex))
+        {
             tc_thread_yield();
+        }
         critical_section(s);
         tc_mutex_unlock(&s->mutex);
     }
@@ -79,10 +83,14 @@ static void run_workers(tc_thread_fn fn, shared_t *s)
 {
     tc_thread_t threads[THREADS];
     for (int i = 0; i < THREADS; ++i)
+    {
         ASSERT_EQ(
             TC_OK, tc_thread_start(&threads[i], fn, s, STRING_LIT("w")).kind);
+    }
     for (int i = 0; i < THREADS; ++i)
+    {
         tc_thread_join(&threads[i]);
+    }
 }
 
 /* --- single thread ------------------------------------------------------ */
@@ -145,7 +153,9 @@ static void try_once(void *arg)
     try_result_t *r = arg;
     r->acquired = tc_mutex_try_lock(r->mutex);
     if (r->acquired)
+    {
         tc_mutex_unlock(r->mutex);
+    }
 }
 
 TEST(try_lock_fails_while_another_thread_holds_it)

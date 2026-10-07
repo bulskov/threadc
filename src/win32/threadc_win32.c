@@ -50,10 +50,14 @@ static void copy_name(char *dst, size_t cap, string_t name)
         /* Back off over continuation bytes (10xxxxxx) to a character
          * boundary. */
         while (n > 0 && ((unsigned char)name.ptr[n] & 0xC0) == 0x80)
+        {
             n--;
+        }
     }
     if (n > 0)
+    {
         memcpy(dst, name.ptr, n);
+    }
     dst[n] = '\0';
 }
 
@@ -62,10 +66,14 @@ static void copy_name(char *dst, size_t cap, string_t name)
 static void set_current_thread_name(const char *name)
 {
     if (name[0] == '\0')
+    {
         return;
+    }
     wchar_t wide[NAME_CAP]; /* never more UTF-16 units than UTF-8 bytes */
     if (MultiByteToWideChar(CP_UTF8, 0, name, -1, wide, NAME_CAP) > 0)
+    {
         SetThreadDescription(GetCurrentThread(), wide);
+    }
 }
 
 static unsigned __stdcall trampoline(void *p)
@@ -237,13 +245,17 @@ tc_err_kind_t tc_cond_wait_timeout(
     {
         uint64_t now = tc_time_now_ns();
         if (now >= deadline)
+        {
             return TC_TIMEOUT;
+        }
         uint64_t left = deadline - now;
         uint64_t ms = left / ns_per_ms + (left % ns_per_ms != 0);
         DWORD wait_ms = ms >= INFINITE ? INFINITE - 1 : (DWORD)ms;
 
         if (SleepConditionVariableSRW(as_condvar(c), as_srwlock(m), wait_ms, 0))
+        {
             return TC_OK;
+        }
         DWORD err = GetLastError();
         assert(err == ERROR_TIMEOUT && "tc_cond_wait_timeout: wait failed");
         (void)err;

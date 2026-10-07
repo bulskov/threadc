@@ -49,7 +49,9 @@ TEST(now_advances)
     uint64_t start = tc_time_now_ns();
     uint64_t now = start;
     for (long i = 0; i < 100000000 && now == start; ++i)
+    {
         now = tc_time_now_ns();
+    }
     ASSERT_GT(now, start);
 }
 
