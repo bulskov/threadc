@@ -12,13 +12,19 @@
 #include <errno.h>
 #include <process.h> /* _beginthreadex */
 #include <stdint.h>
+#include <string.h> /* memcpy */
 #include <windows.h>
+
+/* Thread names: 15 bytes plus the NUL, the same limit as the POSIX backend
+ * (Linux's), so a name looks the same on every platform. */
+#define NAME_CAP 16
 
 typedef struct
 {
     HANDLE handle;
     tc_thread_fn fn;
     void *arg;
+    char name[NAME_CAP]; /* copied at start: the caller's buffer may die */
 } win32_thread_t;
 
 _Static_assert(
@@ -33,9 +39,39 @@ static win32_thread_t *as_win32(tc_thread_t *t)
     return (win32_thread_t *)t->opaque;
 }
 
+/* Copy name into dst (cap bytes including the NUL), truncating at a whole
+ * UTF-8 character so a multi-byte character is never cut in half. */
+static void copy_name(char *dst, size_t cap, string_t name)
+{
+    size_t n = name.ptr ? name.len : 0;
+    if (n > cap - 1)
+    {
+        n = cap - 1;
+        /* Back off over continuation bytes (10xxxxxx) to a character
+         * boundary. */
+        while (n > 0 && ((unsigned char)name.ptr[n] & 0xC0) == 0x80)
+            n--;
+    }
+    if (n > 0)
+        memcpy(dst, name.ptr, n);
+    dst[n] = '\0';
+}
+
+/* Name the calling thread.  Windows wants UTF-16 (SetThreadDescription,
+ * Windows 10 1607 and later); debuggers and Task Manager show it. */
+static void set_current_thread_name(const char *name)
+{
+    if (name[0] == '\0')
+        return;
+    wchar_t wide[NAME_CAP]; /* never more UTF-16 units than UTF-8 bytes */
+    if (MultiByteToWideChar(CP_UTF8, 0, name, -1, wide, NAME_CAP) > 0)
+        SetThreadDescription(GetCurrentThread(), wide);
+}
+
 static unsigned __stdcall trampoline(void *p)
 {
     win32_thread_t *wt = p;
+    set_current_thread_name(wt->name);
     wt->fn(wt->arg);
     return 0;
 }
@@ -43,8 +79,6 @@ static unsigned __stdcall trampoline(void *p)
 tc_err_t tc_thread_start(
     tc_thread_t *t, tc_thread_fn fn, void *arg, string_t name)
 {
-    (void)name;
-
     if (!t || !fn)
     {
         return (tc_err_t){TC_INVALID, 0};
@@ -53,6 +87,7 @@ tc_err_t tc_thread_start(
     win32_thread_t *wt = as_win32(t);
     wt->fn = fn;
     wt->arg = arg;
+    copy_name(wt->name, sizeof wt->name, name);
     uintptr_t h = _beginthreadex(NULL, 0, trampoline, wt, 0, NULL);
     if (h == 0)
     {
@@ -142,6 +177,92 @@ void tc_mutex_unlock(tc_mutex_t *m)
     assert(m != NULL);
     ReleaseSRWLockExclusive(as_srwlock(m));
 }
+
+/* --- Condition variable ------------------------------------------------- */
+
+_Static_assert(
+    sizeof(CONDITION_VARIABLE) <= sizeof(tc_cond_t),
+    "tc_cond_t is too small for CONDITION_VARIABLE");
+_Static_assert(
+    _Alignof(CONDITION_VARIABLE) <= _Alignof(tc_cond_t),
+    "tc_cond_t is under-aligned for CONDITION_VARIABLE");
+
+/* Timeouts at least this long (100 years) mean "no limit": the wait becomes
+ * a plain wait, which also keeps now + timeout far from overflowing. */
+#define FOREVER_NS (UINT64_C(100) * 365 * 24 * 3600 * NS_PER_S)
+
+static CONDITION_VARIABLE *as_condvar(tc_cond_t *c)
+{
+    return (CONDITION_VARIABLE *)c->opaque;
+}
+
+void tc_cond_init(tc_cond_t *c)
+{
+    assert(c != NULL);
+    InitializeConditionVariable(as_condvar(c));
+}
+
+void tc_cond_destroy(tc_cond_t *c)
+{
+    assert(c != NULL);
+    /* Condition variables do not need explicit destruction on Windows */
+}
+
+void tc_cond_wait(tc_cond_t *c, tc_mutex_t *m)
+{
+    assert(c != NULL && m != NULL);
+    BOOL ok =
+        SleepConditionVariableSRW(as_condvar(c), as_srwlock(m), INFINITE, 0);
+    assert(ok && "tc_cond_wait: wait failed");
+    (void)ok;
+}
+
+tc_err_kind_t tc_cond_wait_timeout(
+    tc_cond_t *c, tc_mutex_t *m, uint64_t timeout_ns)
+{
+    assert(c != NULL && m != NULL);
+    if (timeout_ns >= FOREVER_NS)
+    {
+        tc_cond_wait(c, m);
+        return TC_OK;
+    }
+
+    /* Windows waits in whole milliseconds and its timer may end a wait a
+     * little early, so wait against a deadline: only report TC_TIMEOUT once
+     * the full timeout has really passed.  The same loop also splits
+     * timeouts too long for one DWORD of milliseconds. */
+    const uint64_t ns_per_ms = UINT64_C(1000000);
+    uint64_t deadline = tc_time_now_ns() + timeout_ns;
+    for (;;)
+    {
+        uint64_t now = tc_time_now_ns();
+        if (now >= deadline)
+            return TC_TIMEOUT;
+        uint64_t left = deadline - now;
+        uint64_t ms = left / ns_per_ms + (left % ns_per_ms != 0);
+        DWORD wait_ms = ms >= INFINITE ? INFINITE - 1 : (DWORD)ms;
+
+        if (SleepConditionVariableSRW(as_condvar(c), as_srwlock(m), wait_ms, 0))
+            return TC_OK;
+        DWORD err = GetLastError();
+        assert(err == ERROR_TIMEOUT && "tc_cond_wait_timeout: wait failed");
+        (void)err;
+    }
+}
+
+void tc_cond_signal(tc_cond_t *c)
+{
+    assert(c != NULL);
+    WakeConditionVariable(as_condvar(c));
+}
+
+void tc_cond_broadcast(tc_cond_t *c)
+{
+    assert(c != NULL);
+    WakeAllConditionVariable(as_condvar(c));
+}
+
+/* --- Time --------------------------------------------------------------- */
 
 uint64_t tc_time_now_ns(void)
 {

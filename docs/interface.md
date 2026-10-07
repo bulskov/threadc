@@ -57,16 +57,48 @@ static_assert(sizeof(pthread_mutex_t) <= sizeof(tc_mutex_t), "tc_mutex_t too sma
 static_assert(_Alignof(pthread_mutex_t) <= 8, "tc_mutex_t underaligned");
 ```
 
-The sizes in the draft header are estimates. Known native sizes to check:
+Native sizes, as the `_Static_assert`s in the backends now check them:
 
 | Type | Linux x86-64 | macOS arm64 | Win32 |
 |---|---|---|---|
 | mutex | `pthread_mutex_t` 40 | 64 | `SRWLOCK` 8 |
 | cond | `pthread_cond_t` 48 | 48 | `CONDITION_VARIABLE` 8 |
-| thread | `pthread_t` 8 | 8 | `HANDLE` 8 (+ id) |
-| once | `pthread_once_t` 4 | 16 | `INIT_ONCE` 8 |
+| thread | `pthread_t` 8 + fn, arg, name[16] = 40 | 40 | `HANDLE` 8 + fn, arg, name[16] = 40 |
+| once | — (portable `atomic_int`, 4) | 4 | 4 |
 
-*(Verify these — macOS `pthread_once_t` may force `tc_once_t` to grow.)*
+`tc_thread_t` is 64 bytes, leaving room; `tc_cond_t` (48) is exactly full on
+both POSIX platforms.
+
+## Once without pthread_once
+
+`tc_once` is the same code on every platform (`src/common/once.c`): an
+`atomic_int` that one thread moves from *not started* to *running* with a
+compare-and-swap, runs `fn`, and stores *done* with release ordering; other
+callers yield until they see *done* with acquire ordering. Wrapping
+`pthread_once` was the obvious alternative, but macOS's `PTHREAD_ONCE_INIT` is
+not all zeros, and an all-zero `TC_ONCE_INIT` (or static storage) must be valid
+everywhere.
+
+## Condition variable timeouts
+
+- **Linux:** the condition variable is created with
+  `pthread_condattr_setclock(CLOCK_MONOTONIC)`, and the relative timeout becomes
+  an absolute deadline on that clock — the same clock as `tc_time_now_ns`.
+- **macOS:** has no `setclock`; `pthread_cond_timedwait_relative_np` takes the
+  relative timeout directly.
+- **Windows:** `SleepConditionVariableSRW` waits in whole milliseconds and may
+  end a little early, so it runs in a deadline loop and only reports
+  `TC_TIMEOUT` once the full timeout has passed.
+- A timeout of 0 times out at once; 100 years or more means no limit (which
+  also keeps `now + timeout` from overflowing).
+
+## Thread names
+
+Copied into `tc_thread_t` at start and set by the trampoline in the new thread
+before `fn` runs — macOS can only name the current thread. Linux
+`prctl(PR_SET_NAME)`, macOS `pthread_setname_np`, Windows
+`SetThreadDescription` (UTF-16). At most 15 bytes everywhere (Linux's limit),
+cut at a whole UTF-8 character, so a name looks the same on every platform.
 
 ## No detach
 
@@ -113,24 +145,32 @@ Audit list before claiming the above:
 - [ ] `ctt`: are assertions from worker threads safe? (test state and signal
       based crash isolation are probably global — start with "assert on the
       main thread only")
-- [ ] CI: ThreadSanitizer build (`-fsanitize=thread`; cannot be combined with
+- [x] CI: ThreadSanitizer build (`-fsanitize=thread`; cannot be combined with
       ASan, so separate presets)
 
-## Tests to write first
+## Tests
 
-1. N threads × M increments under a mutex → exactly N·M.
-2. Producer/consumer through mutex + cond, with spurious-wakeup-safe loops.
-3. `tc_cond_wait_timeout` returns `TC_TIMEOUT` within a sane bound, and
-   `TC_OK` when signalled before the deadline.
-4. `tc_once` raced from many threads → `fn` runs exactly once.
-5. Thread names are visible (Linux: `/proc/self/task/*/comm`).
+One ctt suite per part, each built and run under ASan and TSan in CI, with a
+60 s ctest timeout so a lost wakeup fails instead of hanging:
+
+| Suite | Covers |
+|---|---|
+| `time_test.c` | monotonic clock, sleep (rounding, > 1 s, 0) |
+| `thread_test.c` | start/join, args, reuse, invalid arguments, ids, CPU count |
+| `mutex_test.c` | exclusion and visibility (8 × 50 000 increments), try_lock |
+| `cond_test.c` | signal, broadcast, timeouts (relative vs absolute, 0, > 1 s, huge), producer/consumer |
+| `once_test.c` | runs once, all-zero initial state, 16 racing threads |
+| `name_test.c` | names read back from the OS, 15-byte cut at a UTF-8 boundary |
+
+## Decided
+
+- `tc_thread_start` takes `string_t`: consistent with the family, and `seqc` is
+  needed for the queue and pool anyway.
+- `tc_once` takes `void (*fn)(void)`, no context pointer: initialisation
+  functions work on statics.
+- Windows: clang-cl. MSVC's `cl` needs `/experimental:c11atomics` for
+  `<stdatomic.h>`.
 
 ## Open questions
 
-- Should `tc_thread_start` take `string_t` (pulls in `seqc` for the core) or
-  `const char *`? `string_t` is consistent with the family; `seqc` is needed
-  for the queue/pool anyway.
-- Does `tc_once` need a context pointer (`void (*fn)(void *)`)? pthreads does
-  not support it directly; Win32 `InitOnceExecuteOnce` does.
-- Windows toolchain: clang-cl only, or also MSVC? (C11 atomics in MSVC are
-  still marked experimental.)
+- Semaphore, queue and pool: API and tests still to design.
