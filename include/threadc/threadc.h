@@ -42,7 +42,7 @@ typedef struct
 
 typedef struct
 {
-    _Alignas(8) unsigned char opaque[16];
+    _Alignas(8) unsigned char opaque[64];
 } tc_thread_t;
 
 typedef struct
@@ -68,6 +68,7 @@ typedef void (*tc_thread_fn)(void *arg);
 
 /* name is copied and truncated to the OS limit (15 bytes on Linux);
  * it shows up in debuggers, perf and htop. */
+/* Do not move or copy the tc_thread_t between start and join. */
 tc_err_t tc_thread_start(
     tc_thread_t *t, tc_thread_fn fn, void *arg, string_t name);
 
