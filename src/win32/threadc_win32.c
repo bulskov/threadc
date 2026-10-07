@@ -99,6 +99,50 @@ int tc_cpu_count(void)
     return n > 0 ? n : 1;
 }
 
+/* --- Mutex -------------------------------------------------------------- */
+
+_Static_assert(
+    sizeof(SRWLOCK) <= sizeof(tc_mutex_t),
+    "tc_mutex_t is too small for SRWLOCK");
+_Static_assert(
+    _Alignof(SRWLOCK) <= _Alignof(tc_mutex_t),
+    "tc_mutex_t is under-aligned for SRWLOCK");
+
+static SRWLOCK *as_srwlock(tc_mutex_t *m)
+{
+    return (SRWLOCK *)m->opaque;
+}
+
+void tc_mutex_init(tc_mutex_t *m)
+{
+    assert(m != NULL);
+    InitializeSRWLock(as_srwlock(m));
+}
+
+void tc_mutex_destroy(tc_mutex_t *m)
+{
+    assert(m != NULL);
+    /* SRW locks do not need explicit destruction on Windows */
+}
+
+void tc_mutex_lock(tc_mutex_t *m)
+{
+    assert(m != NULL);
+    AcquireSRWLockExclusive(as_srwlock(m));
+}
+
+bool tc_mutex_try_lock(tc_mutex_t *m)
+{
+    assert(m != NULL);
+    return TryAcquireSRWLockExclusive(as_srwlock(m)) != 0;
+}
+
+void tc_mutex_unlock(tc_mutex_t *m)
+{
+    assert(m != NULL);
+    ReleaseSRWLockExclusive(as_srwlock(m));
+}
+
 uint64_t tc_time_now_ns(void)
 {
     LARGE_INTEGER counter, frequency;
