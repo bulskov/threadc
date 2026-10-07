@@ -2,9 +2,11 @@
 
 Portable threads, locks and time for C11 — pthreads and Win32 backends.
 
-> **Status: design draft.** The interface in
-> [`include/threadc/threadc.h`](include/threadc/threadc.h) is a proposal; nothing
-> is implemented yet. The reasoning behind it is in
+> **Status: core implemented.** Everything in
+> [`include/threadc/threadc.h`](include/threadc/threadc.h) — threads, mutexes,
+> condition variables, once, thread names, time — works on Linux, macOS and
+> Windows, tested in CI under ASan and TSan. The semaphore, queue and worker
+> pool are still to come. The reasoning behind the design is in
 > [`docs/interface.md`](docs/interface.md).
 
 ## Intent
@@ -35,18 +37,30 @@ Goals:
 - **Same behaviour on every platform**, verified by the same tests in CI on
   Linux and Windows, under ThreadSanitizer.
 
-## Planned layout
+## Layout
 
 ```
 include/threadc/threadc.h   core: threads, mutex, cond, once, time
-include/threadc/sema.h      counting semaphore      (portable, on top of core)
-include/threadc/queue.h     bounded MPMC queue      (portable, on top of core)
-include/threadc/pool.h      worker pool, one arena per worker
-src/posix/                  pthreads backend
+src/posix/                  pthreads backend (Linux, macOS)
 src/win32/                  Win32 backend
-src/common/                 sema, queue, pool — no OS code
-tests/                      ctt tests, run under TSan
+src/common/                 portable code, no OS calls (tc_once)
+tests/                      ctt tests, run under ASan and TSan in CI
 ```
+
+Planned, on top of the core and with no OS code of their own:
+
+```
+include/threadc/sema.h      counting semaphore
+include/threadc/queue.h     bounded MPMC queue
+include/threadc/pool.h      worker pool, one arena per worker
+```
+
+## Platform requirements
+
+- **Linux, macOS:** any C11 compiler with pthreads (gcc, clang).
+- **Windows:** clang-cl, and Windows 10 1607 or later (thread names use
+  `SetThreadDescription`). `tc_once` uses C11 `<stdatomic.h>`, which MSVC's
+  `cl` only offers behind `/experimental:c11atomics`.
 
 ## Dependencies
 
