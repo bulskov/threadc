@@ -99,6 +99,68 @@ int tc_cpu_count(void)
     return n > 0 ? (int)n : 1;
 }
 
+/* --- Mutex -------------------------------------------------------------- */
+
+_Static_assert(
+    sizeof(pthread_mutex_t) <= sizeof(tc_mutex_t),
+    "tc_mutex_t is too small for pthread_mutex_t");
+_Static_assert(
+    _Alignof(pthread_mutex_t) <= _Alignof(tc_mutex_t),
+    "tc_mutex_t is under-aligned for pthread_mutex_t");
+
+static pthread_mutex_t *as_pmutex(tc_mutex_t *m)
+{
+    return (pthread_mutex_t *)m->opaque;
+}
+
+void tc_mutex_init(tc_mutex_t *m)
+{
+    assert(m != NULL);
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+#ifndef NDEBUG
+    /* Debug: unlocking a mutex you don't own, or locking one you already
+     * hold, returns an error instead of being undefined behaviour. */
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+#endif
+    int rc = pthread_mutex_init(as_pmutex(m), &attr);
+    pthread_mutexattr_destroy(&attr);
+    assert(rc == 0);
+    (void)rc;
+}
+
+void tc_mutex_destroy(tc_mutex_t *m)
+{
+    assert(m != NULL);
+    int rc = pthread_mutex_destroy(as_pmutex(m));
+    assert(rc == 0);
+    (void)rc;
+}
+
+void tc_mutex_lock(tc_mutex_t *m)
+{
+    assert(m != NULL);
+    int rc = pthread_mutex_lock(as_pmutex(m));
+    assert(rc == 0);
+    (void)rc;
+}
+
+bool tc_mutex_try_lock(tc_mutex_t *m)
+{
+    assert(m != NULL);
+    int rc = pthread_mutex_trylock(as_pmutex(m));
+    assert(rc == 0 || rc == EBUSY);
+    return rc == 0;
+}
+
+void tc_mutex_unlock(tc_mutex_t *m)
+{
+    assert(m != NULL);
+    int rc = pthread_mutex_unlock(as_pmutex(m));
+    assert(rc == 0);
+    (void)rc;
+}
+
 uint64_t tc_time_now_ns(void)
 {
     struct timespec ts;
