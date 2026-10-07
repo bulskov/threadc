@@ -7,3 +7,4 @@ function(threadc_test name)
 endfunction()
 
 threadc_test(smoke)
+threadc_test(time)
