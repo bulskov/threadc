@@ -33,8 +33,7 @@
  * this long. */
 #define PATIENCE (10 * NS_PER_S)
 
-/* --- a gate: one flag, the mutex that protects it, the cond that announces
- *     it ------------------------------------------------------------------ */
+/* --- a gate: a flag, its mutex, the cond that announces it -------------- */
 
 typedef struct
 {
@@ -131,8 +130,7 @@ static void wait_until_waiting(gate_t *g, int n)
     }
 }
 
-/* --- basics ------------------------------------------------------------------
- */
+/* --- basics ------------------------------------------------------------- */
 
 TEST(init_destroy_many_times)
 {
@@ -155,8 +153,7 @@ TEST(signal_and_broadcast_without_waiters)
     gate_destroy(&g);
 }
 
-/* --- wait and signal
- * ------------------------------------------------------------- */
+/* --- wait and signal ---------------------------------------------------- */
 
 TEST(wait_returns_after_signal)
 {
@@ -199,8 +196,7 @@ TEST(predicate_set_before_wait_is_not_lost)
     gate_destroy(&g);
 }
 
-/* --- broadcast
- * --------------------------------------------------------------------- */
+/* --- broadcast ---------------------------------------------------------- */
 
 #define WAITERS 8
 
@@ -228,8 +224,7 @@ TEST(broadcast_wakes_every_waiter)
     gate_destroy(&g);
 }
 
-/* --- wait_timeout
- * ------------------------------------------------------------------- */
+/* --- wait_timeout ------------------------------------------------------- */
 
 /* Nobody signals: one call must sleep at least the timeout, then report
  * TC_TIMEOUT.  Catches the classic bug of handing a RELATIVE time to an
@@ -345,8 +340,7 @@ TEST(huge_timeout_does_not_overflow)
     gate_destroy(&g);
 }
 
-/* --- producer / consumer
- * -------------------------------------------------------------- */
+/* --- producer / consumer ------------------------------------------------ */
 /* The classic: a small bounded queue, two conditions (not_empty, not_full)
  * sharing one mutex.  Producers block when it is full, consumers when it is
  * empty. */

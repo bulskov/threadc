@@ -21,8 +21,7 @@
 #define NS_PER_MS UINT64_C(1000000)
 #define MANY 16
 
-/* --- helpers ---------------------------------------------------------------
- */
+/* --- helpers ------------------------------------------------------------ */
 
 /* Each worker gets its own slot; nothing is shared between workers. */
 typedef struct
@@ -66,8 +65,7 @@ static void do_nothing(void *arg)
     (void)arg;
 }
 
-/* --- start and join ---------------------------------------------------------
- */
+/* --- start and join ----------------------------------------------------- */
 
 TEST(start_returns_ok)
 {
@@ -138,8 +136,7 @@ TEST(thread_handle_is_reusable_after_join)
     }
 }
 
-/* --- names ------------------------------------------------------------------
- */
+/* --- names -------------------------------------------------------------- */
 /* Whether the name is visible to debuggers is step 6.  Here: every kind of
  * name is accepted. */
 
@@ -181,8 +178,7 @@ TEST(name_buffer_may_change_after_start)
     tc_thread_join(&t);
 }
 
-/* --- invalid arguments -------------------------------------------------------
- */
+/* --- invalid arguments -------------------------------------------------- */
 
 TEST(null_thread_is_invalid)
 {
@@ -197,8 +193,7 @@ TEST(null_function_is_invalid)
     ASSERT_EQ(TC_INVALID, err.kind);
 }
 
-/* --- tc_thread_id
- * ------------------------------------------------------------- */
+/* --- tc_thread_id ------------------------------------------------------- */
 
 TEST(thread_id_is_stable_within_a_thread)
 {
@@ -240,8 +235,7 @@ TEST(live_threads_have_distinct_ids)
     }
 }
 
-/* --- tc_cpu_count, tc_thread_yield
- * --------------------------------------------- */
+/* --- tc_cpu_count, tc_thread_yield -------------------------------------- */
 
 TEST(cpu_count_is_at_least_one)
 {

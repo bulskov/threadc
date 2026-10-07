@@ -28,8 +28,7 @@
 #define THREADS 8
 #define INCREMENTS 50000
 
-/* --- shared state ------------------------------------------------------------
- */
+/* --- shared state ------------------------------------------------------- */
 
 typedef struct
 {
@@ -86,8 +85,7 @@ static void run_workers(tc_thread_fn fn, shared_t *s)
         tc_thread_join(&threads[i]);
 }
 
-/* --- single thread
- * ------------------------------------------------------------ */
+/* --- single thread ------------------------------------------------------ */
 
 TEST(init_lock_unlock_destroy)
 {
@@ -134,8 +132,7 @@ TEST(mutex_embedded_in_a_struct)
     ASSERT_EQ(7, s.counter);
 }
 
-/* --- try_lock against another thread ----------------------------------------
- */
+/* --- try_lock against another thread ------------------------------------ */
 
 typedef struct
 {
@@ -172,8 +169,7 @@ TEST(try_lock_fails_while_another_thread_holds_it)
     tc_mutex_destroy(&m);
 }
 
-/* --- many threads
- * ----------------------------------------------------------------- */
+/* --- many threads ------------------------------------------------------- */
 
 TEST(lock_makes_increments_exact)
 {
