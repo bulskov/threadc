@@ -249,6 +249,36 @@ TEST(live_threads_have_distinct_ids)
     }
 }
 
+/* Ids are never reused, not even after a thread has finished: one thread at
+ * a time, each started only after the previous one was joined — exactly the
+ * case where OS thread ids (and, on macOS, thread-local addresses) repeat. */
+#define SEQUENTIAL 64
+
+TEST(thread_ids_are_never_reused)
+{
+    uint64_t ids[SEQUENTIAL];
+    for (int i = 0; i < SEQUENTIAL; ++i)
+    {
+        slot_t s = {0};
+        tc_thread_t t;
+        ASSERT_EQ(
+            TC_OK, tc_thread_start(&t, record, &s, STRING_LIT("seq")).kind);
+        tc_thread_join(&t);
+        ids[i] = s.id;
+    }
+
+    uint64_t main_id = tc_thread_id();
+    for (int i = 0; i < SEQUENTIAL; ++i)
+    {
+        ASSERT_NE(0, ids[i]);
+        ASSERT_NE(main_id, ids[i]);
+        for (int j = i + 1; j < SEQUENTIAL; ++j)
+        {
+            ASSERT_NE(ids[i], ids[j]);
+        }
+    }
+}
+
 /* --- tc_cpu_count, tc_thread_yield -------------------------------------- */
 
 TEST(cpu_count_is_at_least_one)

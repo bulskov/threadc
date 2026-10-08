@@ -4,6 +4,7 @@ add_library(threadc::threadc ALIAS threadc)
 # Portable code (no OS calls) is the same on every platform.
 target_sources(threadc PRIVATE
     common/once.c
+    common/thread_id.c
 )
 
 # One backend per platform.

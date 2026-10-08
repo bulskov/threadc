@@ -82,8 +82,8 @@ tc_err_t tc_thread_start(
  * owns the thread's lifetime, as with arenas. */
 void tc_thread_join(tc_thread_t *t);
 
-/* Id of the calling thread: stable for its lifetime, distinct from every
- * other live thread.  Ids of finished threads may be reused. */
+/* Id of the calling thread: never 0, stable for its lifetime, and never
+ * reused within the process — not even after a thread has finished. */
 uint64_t tc_thread_id(void);
 void tc_thread_yield(void);
 int tc_cpu_count(void); /* logical CPUs online; at least 1 */
