@@ -126,11 +126,6 @@ void tc_thread_join(tc_thread_t *t)
     wt->handle = NULL;
 }
 
-uint64_t tc_thread_id(void)
-{
-    return (uint64_t)GetCurrentThreadId();
-}
-
 void tc_thread_yield(void)
 {
     SwitchToThread();

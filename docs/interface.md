@@ -92,6 +92,17 @@ everywhere.
 - A timeout of 0 times out at once; 100 years or more means no limit (which
   also keeps `now + timeout` from overflowing).
 
+## Thread ids
+
+`tc_thread_id` is a process-wide counter, assigned on a thread's first call
+and kept in a `_Thread_local` (`src/common/thread_id.c`): never 0, never
+reused. Both obvious alternatives repeat ids:
+
+- the address of a `_Thread_local` variable — glibc reuses a finished
+  thread's memory, and macOS allocates thread-local storage lazily on first
+  use, so even two threads alive at the same time could get one address;
+- the OS thread id (`gettid`, `GetCurrentThreadId`) — reused after exit.
+
 ## Thread names
 
 Copied into `tc_thread_t` at start and set by the trampoline in the new thread
@@ -156,7 +167,7 @@ One ctt suite per part, each built and run under ASan and TSan in CI, with a
 | Suite | Covers |
 |---|---|
 | `time_test.c` | monotonic clock, sleep (rounding, > 1 s, 0) |
-| `thread_test.c` | start/join, args, reuse, invalid arguments, ids, CPU count |
+| `thread_test.c` | start/join, args, reuse, invalid arguments, ids (distinct, never reused), CPU count |
 | `mutex_test.c` | exclusion and visibility (8 × 50 000 increments), try_lock |
 | `cond_test.c` | signal, broadcast, timeouts (relative vs absolute, 0, > 1 s, huge), producer/consumer |
 | `once_test.c` | runs once, all-zero initial state, 16 racing threads |

@@ -129,12 +129,6 @@ void tc_thread_join(tc_thread_t *t)
     (void)rc; /* unused when NDEBUG removes the assert */
 }
 
-uint64_t tc_thread_id(void)
-{
-    static _Thread_local char marker; /* one per thread */
-    return (uint64_t)(uintptr_t)&marker;
-}
-
 void tc_thread_yield(void)
 {
     sched_yield();
