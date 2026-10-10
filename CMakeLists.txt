@@ -53,7 +53,7 @@ include(FetchContent)
 
 set(THREADC_SEQC_GIT_REPOSITORY "https://github.com/bulskov/seqc.git"
     CACHE STRING "Clone URL for the seqc dependency")
-set(THREADC_SEQC_GIT_TAG "v3.0.0"
+set(THREADC_SEQC_GIT_TAG "v3.1.0"
     CACHE STRING "Tag or commit of the seqc dependency")
 set(THREADC_CTT_GIT_TAG "v0.3.1"
     CACHE STRING "Tag or commit of the ctt dependency (tests only)")
