@@ -16,10 +16,10 @@ teaches us things.
 **Later, in their own headers, built portably on top of the core — no
 backend code:**
 
-- `sema.h` — counting semaphore from mutex + cond. macOS has no unnamed POSIX
+- `sema.h` — counting semaphore from mutex + cond (done). macOS has no unnamed POSIX
   semaphores, so writing it once ourselves is simpler than three backends.
 - `queue.h` — bounded MPMC queue, fixed `elem_size`, with `close()` for clean
-  shutdown (wakes all waiters; push fails, pop drains then fails).
+  shutdown (wakes all waiters; push fails, pop drains then fails) (done).
 - `pool.h` — N worker threads, each owning its own arena. A job is
   `void (*)(void *arg, allocator_t scratch)`; the scratch arena is reset
   between jobs.
@@ -129,6 +129,34 @@ pthreads needs an absolute `CLOCK_MONOTONIC` deadline (`pthread_condattr_setcloc
 — not available on macOS, which needs `pthread_cond_timedwait_relative_np`),
 Win32 takes milliseconds.
 
+## Semaphore and queue
+
+Both are portable code in `src/common/`, built from the core primitives, with
+their structs visible so they can be embedded without an allocator (the
+fields are private).
+
+- **Timeouts** follow `tc_cond_wait_timeout`: relative, monotonic. `0` only
+  tries, and `TC_FOREVER` (`UINT64_MAX`) waits with no limit, so there is one
+  timed function per operation instead of separate `try_` variants. A timed
+  wait loops on its predicate with what is left of the timeout, and checks
+  the predicate before the time, so a wakeup that arrives with the timeout is
+  not lost (`src/common/wait.h`).
+- **Queue memory:** the ring buffer is the only allocation. It comes from the
+  caller's `allocator_t` in `tc_queue_init` and goes back in
+  `tc_queue_destroy`, both on the owner's thread, so the allocator need not
+  be thread-safe, and push/pop never allocate. Elements are fixed-size and
+  copied in and out.
+- **Shutdown is `tc_queue_close`**, not a sentinel element: it wakes every
+  waiter; push then fails at once (`TC_CLOSED`) and pop returns what is left,
+  then fails. Producers and consumers stop, the owner joins them and destroys
+  the queue — the same "creator owns the lifetime" rule as threads.
+- **One mutex, two condition variables** (`not_empty`, `not_full`). Every
+  waiter on one of them waits for the same thing, so a push or pop signals one
+  waiter; close broadcasts both. Lock-free designs were not worth it for a
+  file manager's job queue; a lock-free SPSC ring may still go into `seqc`.
+- `TC_CLOSED` was added to `tc_err_kind_t`, after `TC_OS`, so the existing
+  values do not change.
+
 ## Thread model of the library family
 
 threadc is also the tool for testing the other libraries under threads. The
@@ -172,6 +200,8 @@ One ctt suite per part, each built and run under ASan and TSan in CI, with a
 | `cond_test.c` | signal, broadcast, timeouts (relative vs absolute, 0, > 1 s, huge), producer/consumer |
 | `once_test.c` | runs once, all-zero initial state, 16 racing threads |
 | `name_test.c` | names read back from the OS, 15-byte cut at a UTF-8 boundary |
+| `sema_test.c` | initial count, try/timeout, post wakes a waiter, every unit taken once, one unit excludes |
+| `queue_test.c` | init errors, one allocation given back, FIFO around the ring, any element size, try/timeouts, waiting push/pop, close (drains, wakes both sides), 4 × 4 threads: every element once and in order per producer |
 
 ## Decided
 
@@ -184,4 +214,4 @@ One ctt suite per part, each built and run under ASan and TSan in CI, with a
 
 ## Open questions
 
-- Semaphore, queue and pool: API and tests still to design.
+- Pool: API and tests still to design.

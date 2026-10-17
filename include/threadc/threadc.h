@@ -26,6 +26,7 @@ typedef enum
     TC_RESOURCE, /* OS refused: too many threads, out of memory */
     TC_INVALID,  /* NULL or otherwise invalid argument          */
     TC_OS,       /* anything else; see os_code                  */
+    TC_CLOSED,   /* queue closed (and, for pop, drained)        */
 } tc_err_kind_t;
 
 typedef struct
@@ -128,3 +129,6 @@ void tc_once(tc_once_t *o, void (*fn)(void));
 
 uint64_t tc_time_now_ns(void); /* monotonic, unrelated to wall clock */
 void tc_sleep_ns(uint64_t ns); /* at least ns; signals do not cut it short */
+
+/* A timeout with no limit, for every *_timeout function. */
+#define TC_FOREVER UINT64_MAX

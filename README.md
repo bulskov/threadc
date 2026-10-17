@@ -2,11 +2,12 @@
 
 Portable threads, locks and time for C11 — pthreads and Win32 backends.
 
-> **Status: core implemented.** Everything in
+> **Status: core, semaphore and queue implemented.** Everything in
 > [`include/threadc/threadc.h`](include/threadc/threadc.h) — threads, mutexes,
-> condition variables, once, thread names, time — works on Linux, macOS and
-> Windows, tested in CI under ASan and TSan. The semaphore, queue and worker
-> pool are still to come. The reasoning behind the design is in
+> condition variables, once, thread names, time — plus the counting semaphore
+> ([`sema.h`](include/threadc/sema.h)) and the bounded MPMC queue
+> ([`queue.h`](include/threadc/queue.h)) work on Linux, macOS and Windows,
+> tested in CI under ASan and TSan. The worker pool is still to come. The reasoning behind the design is in
 > [`docs/interface.md`](docs/interface.md).
 
 ## Intent
@@ -41,17 +42,17 @@ Goals:
 
 ```
 include/threadc/threadc.h   core: threads, mutex, cond, once, time
+include/threadc/sema.h      counting semaphore
+include/threadc/queue.h     bounded MPMC queue
 src/posix/                  pthreads backend (Linux, macOS)
 src/win32/                  Win32 backend
-src/common/                 portable code, no OS calls (tc_once)
+src/common/                 portable code, no OS calls (once, sema, queue)
 tests/                      ctt tests, run under ASan and TSan in CI
 ```
 
-Planned, on top of the core and with no OS code of their own:
+Planned, on top of the core and with no OS code of its own:
 
 ```
-include/threadc/sema.h      counting semaphore
-include/threadc/queue.h     bounded MPMC queue
 include/threadc/pool.h      worker pool, one arena per worker
 ```
 
