@@ -22,7 +22,7 @@ backend code:**
   shutdown (wakes all waiters; push fails, pop drains then fails) (done).
 - `pool.h` — N worker threads, each owning its own arena. A job is
   `void (*)(void *arg, allocator_t scratch)`; the scratch arena is reset
-  between jobs.
+  between jobs (done).
 
 **Explicitly out of scope:**
 
@@ -157,6 +157,30 @@ fields are private).
 - `TC_CLOSED` was added to `tc_err_kind_t`, after `TC_OS`, so the existing
   values do not change.
 
+## Pool
+
+A `tc_queue_t` of jobs (function + argument) and N threads popping it.
+
+- **Scratch:** each worker owns a `growing_arena_t`, reset after every job,
+  so a job allocates without locks and without freeing. A growing arena
+  rather than a fixed one, because a job's need is not known up front (a
+  directory of 100 000 entries); `scratch_block` is only the step it grows
+  by. The arenas take OS pages directly; what the pool takes from the
+  caller's allocator (the workers' bookkeeping and the queue) is allocated
+  in start and given back in stop, on the owner's thread.
+- **Results outlive scratch**, so they go where the job's argument says: an
+  arena the job fills and hands to the main thread (fskim's directory
+  jobs), a queue, a slot in an array.
+- **Stop drains:** it closes the queue, the workers run what is left and
+  return, the owner joins them. There is no cancel and no discard — a job
+  that should stop early checks a flag in its argument, which also covers a
+  job that is already running.
+- **Jobs may submit jobs**, but only with a timeout of 0: if every worker
+  waited for room at once, nobody would make room.
+- **No `wait_idle`:** the owner learns that work is done from the work
+  itself (fskim: the job wakes the main loop). Add it when a real need shows
+  up.
+
 ## Thread model of the library family
 
 threadc is also the tool for testing the other libraries under threads. The
@@ -201,6 +225,7 @@ One ctt suite per part, each built and run under ASan and TSan in CI, with a
 | `once_test.c` | runs once, all-zero initial state, 16 racing threads |
 | `name_test.c` | names read back from the OS, 15-byte cut at a UTF-8 boundary |
 | `sema_test.c` | initial count, try/timeout, post wakes a waiter, every unit taken once, one unit excludes |
+| `pool_test.c` | start errors, one worker per CPU, everything given back, every job once, all workers at once, full queue and stop drains, scratch reset and growth, jobs submitting jobs |
 | `queue_test.c` | init errors, one allocation given back, FIFO around the ring, any element size, try/timeouts, waiting push/pop, close (drains, wakes both sides), 4 × 4 threads: every element once and in order per producer |
 
 ## Decided
@@ -214,4 +239,4 @@ One ctt suite per part, each built and run under ASan and TSan in CI, with a
 
 ## Open questions
 
-- Pool: API and tests still to design.
+- None right now.
