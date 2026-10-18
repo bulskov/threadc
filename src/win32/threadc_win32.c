@@ -160,6 +160,7 @@ void tc_mutex_init(tc_mutex_t *m)
 void tc_mutex_destroy(tc_mutex_t *m)
 {
     assert(m != NULL);
+    (void)m; /* unused when NDEBUG removes the assert */
     /* SRW locks do not need explicit destruction on Windows */
 }
 
@@ -208,6 +209,7 @@ void tc_cond_init(tc_cond_t *c)
 void tc_cond_destroy(tc_cond_t *c)
 {
     assert(c != NULL);
+    (void)c; /* unused when NDEBUG removes the assert */
     /* Condition variables do not need explicit destruction on Windows */
 }
 
